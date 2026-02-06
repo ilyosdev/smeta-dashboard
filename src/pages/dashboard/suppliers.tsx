@@ -1,0 +1,227 @@
+import { Link } from "react-router-dom";
+import { Truck, Package, AlertTriangle, Wallet, ArrowRight, Clock } from "lucide-react";
+import { StatsCard } from "@/components/dashboard/stats-card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useApi } from "@/hooks/use-api";
+import { suppliersApi } from "@/lib/api/suppliers";
+import { StatsSkeleton } from "@/components/ui/table-skeleton";
+import { ErrorMessage } from "@/components/ui/error-message";
+
+function formatNumber(num: number): string {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + "M";
+  }
+  return num.toLocaleString("uz-UZ");
+}
+
+export default function SuppliersPage() {
+  const {
+    data: suppliersResponse,
+    loading: suppliersLoading,
+    error: suppliersError,
+    refetch: refetchSuppliers,
+  } = useApi(() => suppliersApi.getAll({ limit: 100 }), []);
+
+  const {
+    data: ordersResponse,
+    loading: ordersLoading,
+  } = useApi(() => suppliersApi.getOrders({ status: "PENDING", limit: 10 }), []);
+
+  const {
+    data: deliveredOrdersResponse,
+    loading: deliveredLoading,
+  } = useApi(() => suppliersApi.getOrders({ status: "DELIVERED", limit: 5 }), []);
+
+  const loading = suppliersLoading || ordersLoading || deliveredLoading;
+  const error = suppliersError;
+
+  const suppliers = suppliersResponse?.data || [];
+  const pendingOrders = ordersResponse?.data || [];
+  const recentDeliveries = deliveredOrdersResponse?.data || [];
+
+  if (error) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight">Yetkazuvchilar</h1>
+          <p className="text-muted-foreground">Pastavshiklar va buyurtmalar</p>
+        </div>
+        <ErrorMessage error={error} onRetry={refetchSuppliers} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold tracking-tight">Yetkazuvchilar</h1>
+        <p className="text-muted-foreground">Pastavshiklar va buyurtmalar</p>
+      </div>
+
+      {loading ? (
+        <StatsSkeleton />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatsCard
+            title="Yetkazuvchilar"
+            value={suppliers.length}
+            subtitle="ta faol"
+            icon={Truck}
+            variant="primary"
+            className="animate-slide-up stagger-1"
+          />
+          <StatsCard
+            title="Jami qarz"
+            value="0"
+            subtitle="to'lanmagan"
+            icon={Wallet}
+            variant="danger"
+            className="animate-slide-up stagger-2"
+          />
+          <StatsCard
+            title="Qarzdorlar"
+            value={0}
+            subtitle="ta yetkazuvchi"
+            icon={AlertTriangle}
+            variant="warning"
+            className="animate-slide-up stagger-3"
+          />
+          <StatsCard
+            title="Kutilmoqda"
+            value={pendingOrders.length}
+            subtitle="ta yetkazma"
+            icon={Clock}
+            variant="default"
+            className="animate-slide-up stagger-4"
+          />
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2 animate-slide-up" style={{ animationDelay: "0.2s" }}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Truck className="h-4 w-4 text-primary" />
+                Yetkazuvchilar
+              </CardTitle>
+              <CardDescription>Qarzlar va buyurtmalar</CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/suppliers/add" className="flex items-center gap-1">
+                Yangi <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {suppliersLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 bg-muted/50 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : suppliers.length > 0 ? (
+              suppliers.map((supplier) => (
+                <div key={supplier.id} className="flex items-center justify-between p-4 rounded-lg border bg-card">
+                  <div>
+                    <p className="font-medium">{supplier.name}</p>
+                    <p className="text-xs text-muted-foreground">{supplier.phone || "Telefon ko'rsatilmagan"}</p>
+                  </div>
+                  <div className="text-right">
+                    <Badge variant="secondary" className="bg-success/10 text-success">
+                      Faol
+                    </Badge>
+                    {supplier.contactPerson && (
+                      <p className="text-xs text-muted-foreground mt-1">{supplier.contactPerson}</p>
+                    )}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Hozircha yetkazuvchilar yo'q
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card className="animate-slide-up" style={{ animationDelay: "0.3s" }}>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Clock className="h-4 w-4 text-warning" />
+                Kutilayotgan yetkazmalar
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {ordersLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-20 bg-muted/50 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : pendingOrders.length > 0 ? (
+                pendingOrders.map((order) => (
+                  <div key={order.id} className="p-3 rounded-lg border bg-warning/5 border-warning/20">
+                    <p className="font-medium text-sm">Order #{order.id.slice(0, 8)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatNumber(order.quantity)} x {formatNumber(order.unitPrice)} so'm
+                    </p>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(order.orderDate).toLocaleDateString("uz-UZ")}
+                      </span>
+                      <Badge variant="outline">{formatNumber(order.totalPrice)}</Badge>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Kutilayotgan yetkazma yo'q
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="animate-slide-up" style={{ animationDelay: "0.4s" }}>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Package className="h-4 w-4 text-success" />
+                Oxirgi yetkazmalar
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {deliveredLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : recentDeliveries.length > 0 ? (
+                recentDeliveries.map((delivery) => (
+                  <div key={delivery.id} className="p-3 rounded-lg border bg-success/5 border-success/20">
+                    <p className="font-medium text-sm">Order #{delivery.id.slice(0, 8)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatNumber(delivery.quantity)} ta - {formatNumber(delivery.totalPrice)} so'm
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {delivery.deliveryDate
+                        ? new Date(delivery.deliveryDate).toLocaleDateString("uz-UZ")
+                        : new Date(delivery.orderDate).toLocaleDateString("uz-UZ")}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Oxirgi yetkazma yo'q
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
