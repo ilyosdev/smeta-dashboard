@@ -255,31 +255,72 @@ export const expensesApi = {
     }),
 };
 
+// Cash Register (Detailed - from API response)
+export interface CashRegisterDetailed {
+  id: string;
+  userId: string;
+  name: string;
+  balance: number;
+  totalIn: number;
+  totalOut: number;
+  createdAt: string;
+  updatedAt: string;
+  user?: { id: string; name: string };
+}
+
 // Cash Register Transactions
 export interface CashTransaction {
   id: string;
   cashRegisterId: string;
-  type: 'income' | 'expense';
+  type: 'IN' | 'OUT';
   amount: number;
-  date: string;
-  description?: string;
-  vendorId: string;
+  note?: string | null;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface CreateCashTransactionRequest {
   cashRegisterId: string;
-  type: 'income' | 'expense';
+  type: 'IN' | 'OUT';
   amount: number;
-  date: string;
-  description?: string;
+  note?: string;
 }
 
 export interface GetCashTransactionsParams extends PaginationParams {
-  type?: 'income' | 'expense';
-  startDate?: string;
-  endDate?: string;
+  type?: 'IN' | 'OUT';
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Cash Requests
+export interface CashRequest {
+  id: string;
+  projectId: string;
+  requestedById: string;
+  amount: number;
+  reason: string | null;
+  neededBy: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'FULFILLED';
+  approvedById: string | null;
+  approvedAt: string | null;
+  rejectionReason: string | null;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  project?: { id: string; name: string };
+  requestedBy?: { id: string; name: string };
+  approvedBy?: { id: string; name: string } | null;
+}
+
+export interface CreateCashRequestRequest {
+  projectId: string;
+  amount: number;
+  reason?: string;
+  neededBy?: string;
+}
+
+export interface GetCashRequestsParams extends PaginationParams {
+  status?: string;
+  projectId?: string;
 }
 
 // Cash Registers API
@@ -289,13 +330,18 @@ export const cashRegistersApi = {
     if (params?.page) searchParams.append('page', params.page.toString());
     if (params?.limit) searchParams.append('limit', params.limit.toString());
     if (params?.search) searchParams.append('search', params.search);
-    
+
     const query = searchParams.toString();
     return apiClient<PaginatedResponse<CashRegister>>(
       `/vendor/cash-registers${query ? `?${query}` : ''}`,
       { method: 'GET' }
     );
   },
+
+  getMyKoshelok: () =>
+    apiClient<CashRegisterDetailed>('/vendor/cash-registers/my', {
+      method: 'GET',
+    }),
 
   getById: (id: string) =>
     apiClient<CashRegister>(`/vendor/cash-registers/${id}`, {
@@ -325,9 +371,9 @@ export const cashRegistersApi = {
     if (params?.page) searchParams.append('page', params.page.toString());
     if (params?.limit) searchParams.append('limit', params.limit.toString());
     if (params?.type) searchParams.append('type', params.type);
-    if (params?.startDate) searchParams.append('startDate', params.startDate);
-    if (params?.endDate) searchParams.append('endDate', params.endDate);
-    
+    if (params?.dateFrom) searchParams.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) searchParams.append('dateTo', params.dateTo);
+
     const query = searchParams.toString();
     return apiClient<PaginatedResponse<CashTransaction>>(
       `/vendor/cash-registers/${cashRegisterId}/transactions${query ? `?${query}` : ''}`,
@@ -339,5 +385,44 @@ export const cashRegistersApi = {
     apiClient<CashTransaction>('/vendor/cash-registers/transactions', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+};
+
+// Cash Requests API
+export const cashRequestsApi = {
+  getAll: (params?: GetCashRequestsParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.status) searchParams.append('status', params.status);
+    if (params?.projectId) searchParams.append('projectId', params.projectId);
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<CashRequest>>(
+      `/vendor/cash-requests${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  create: (data: CreateCashRequestRequest) =>
+    apiClient<CashRequest>('/vendor/cash-requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  approve: (id: string) =>
+    apiClient<CashRequest>(`/vendor/cash-requests/${id}/approve`, {
+      method: 'PATCH',
+    }),
+
+  reject: (id: string, data: { rejectionReason?: string }) =>
+    apiClient<CashRequest>(`/vendor/cash-requests/${id}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    apiClient<void>(`/vendor/cash-requests/${id}`, {
+      method: 'DELETE',
     }),
 };

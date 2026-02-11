@@ -1,0 +1,193 @@
+import { apiClient, PaginationParams } from './client';
+
+// ─── Types ────────────────────────────────────────
+
+export interface AdminOrganization {
+  id: string;
+  name: string;
+  phone?: string;
+  isActive: boolean;
+  userCount: number;
+  projectCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminOperator {
+  id: string;
+  name: string;
+  phone?: string;
+  role: string;
+  isActive: boolean;
+  orgCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminOrgUser {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  telegramId?: string;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminOrgProject {
+  id: string;
+  name: string;
+  address?: string;
+  floors?: number;
+  budget?: number;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminStats {
+  totalOrganizations: number;
+  totalOperators: number;
+  totalUsers: number;
+  totalProjects: number;
+}
+
+export interface UserProjectAssignment {
+  projectId: string;
+  projectName: string;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+}
+
+interface SearchParams extends PaginationParams {
+  search?: string;
+}
+
+// ─── Helpers ──────────────────────────────────────
+
+function buildQuery(params?: SearchParams): string {
+  if (!params) return '';
+  const searchParams = new URLSearchParams();
+  if (params.page) searchParams.append('page', params.page.toString());
+  if (params.limit) searchParams.append('limit', params.limit.toString());
+  if (params.search) searchParams.append('search', params.search);
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
+// ─── API ──────────────────────────────────────────
+
+export const adminApi = {
+  // Stats
+  getStats: () =>
+    apiClient<AdminStats>('/admin/stats', { method: 'GET' }),
+
+  // Organizations
+  getOrganizations: (params?: SearchParams) =>
+    apiClient<PaginatedResponse<AdminOrganization>>(
+      `/admin/organizations${buildQuery(params)}`,
+      { method: 'GET' },
+    ),
+
+  getOrganization: (id: string) =>
+    apiClient<AdminOrganization>(`/admin/organizations/${id}`, { method: 'GET' }),
+
+  createOrganization: (data: { name: string; phone?: string }) =>
+    apiClient<AdminOrganization>('/admin/organizations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateOrganization: (id: string, data: { name?: string; phone?: string; isActive?: boolean }) =>
+    apiClient<AdminOrganization>(`/admin/organizations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteOrganization: (id: string) =>
+    apiClient<{ success: boolean }>(`/admin/organizations/${id}`, { method: 'DELETE' }),
+
+  // Operators
+  getOperators: (params?: SearchParams) =>
+    apiClient<PaginatedResponse<AdminOperator>>(
+      `/admin/operators${buildQuery(params)}`,
+      { method: 'GET' },
+    ),
+
+  createOperator: (data: { name: string; phone: string; password: string; orgIds?: string[] }) =>
+    apiClient<AdminOperator>('/admin/operators', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateOperator: (id: string, data: { name?: string; phone?: string; password?: string; isActive?: boolean }) =>
+    apiClient<AdminOperator>(`/admin/operators/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteOperator: (id: string) =>
+    apiClient<{ success: boolean }>(`/admin/operators/${id}`, { method: 'DELETE' }),
+
+  // Org Users
+  getOrgUsers: (orgId: string, params?: SearchParams) =>
+    apiClient<PaginatedResponse<AdminOrgUser>>(
+      `/admin/organizations/${orgId}/users${buildQuery(params)}`,
+      { method: 'GET' },
+    ),
+
+  createOrgUser: (orgId: string, data: { name: string; phone: string; password: string; role: string; telegramId?: string }) =>
+    apiClient<AdminOrgUser>(`/admin/organizations/${orgId}/users`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateOrgUser: (orgId: string, userId: string, data: { name?: string; phone?: string; password?: string; role?: string; isActive?: boolean; telegramId?: string }) =>
+    apiClient<AdminOrgUser>(`/admin/organizations/${orgId}/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteOrgUser: (orgId: string, userId: string) =>
+    apiClient<{ success: boolean }>(`/admin/organizations/${orgId}/users/${userId}`, { method: 'DELETE' }),
+
+  // Org Projects
+  getOrgProjects: (orgId: string, params?: SearchParams) =>
+    apiClient<PaginatedResponse<AdminOrgProject>>(
+      `/admin/organizations/${orgId}/projects${buildQuery(params)}`,
+      { method: 'GET' },
+    ),
+
+  createOrgProject: (orgId: string, data: { name: string; address?: string; floors?: number; budget?: number }) =>
+    apiClient<AdminOrgProject>(`/admin/organizations/${orgId}/projects`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateOrgProject: (orgId: string, projectId: string, data: { name?: string; address?: string; floors?: number; budget?: number; status?: string }) =>
+    apiClient<AdminOrgProject>(`/admin/organizations/${orgId}/projects/${projectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deleteOrgProject: (orgId: string, projectId: string) =>
+    apiClient<{ success: boolean }>(`/admin/organizations/${orgId}/projects/${projectId}`, { method: 'DELETE' }),
+
+  // User-Project assignments
+  getUserProjects: (orgId: string, userId: string) =>
+    apiClient<UserProjectAssignment[]>(`/admin/organizations/${orgId}/users/${userId}/projects`, { method: 'GET' }),
+
+  assignUserToProject: (orgId: string, userId: string, projectId: string) =>
+    apiClient<{ success: boolean }>(`/admin/organizations/${orgId}/users/${userId}/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ projectId }),
+    }),
+
+  unassignUserFromProject: (orgId: string, userId: string, projectId: string) =>
+    apiClient<{ success: boolean }>(`/admin/organizations/${orgId}/users/${userId}/projects/${projectId}`, { method: 'DELETE' }),
+};

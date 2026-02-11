@@ -1,0 +1,203 @@
+import { Link, useLocation, useParams } from "react-router-dom";
+import {
+  Building2,
+  FolderOpen,
+  Home,
+  Settings,
+  UserCog,
+  Users,
+  HardHat,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+} from "@/components/ui/sidebar";
+import { useAuth } from "@/lib/auth";
+
+type NavItem = {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: string[];
+};
+
+const systemNavItems: NavItem[] = [
+  {
+    title: "Bosh sahifa",
+    url: "/admin",
+    icon: Home,
+  },
+];
+
+const managementNavItems: NavItem[] = [
+  {
+    title: "Operatorlar",
+    url: "/admin/operators",
+    icon: UserCog,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Kompaniyalar",
+    url: "/admin/organizations",
+    icon: Building2,
+  },
+];
+
+export function AdminSidebar() {
+  const location = useLocation();
+  const pathname = location.pathname;
+  const { user } = useAuth();
+  const { orgId } = useParams();
+
+  const isActive = (url: string) => {
+    if (url === "/admin") return pathname === "/admin";
+    return pathname.startsWith(url);
+  };
+
+  const canSeeItem = (item: NavItem) => {
+    if (!item.roles || item.roles.length === 0) return true;
+    return item.roles.includes(user?.role || "");
+  };
+
+  const visibleManagement = managementNavItems.filter(canSeeItem);
+
+  // Detect active org from URL
+  const activeOrgId = orgId || pathname.match(/\/admin\/organizations\/([^/]+)/)?.[1];
+
+  return (
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="h-16 flex items-center justify-center border-b border-sidebar-border">
+        <Link to="/admin" className="flex items-center gap-2.5 px-2 group-data-[collapsible=icon]:px-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-red-600 text-white shadow-md shadow-orange-500/25">
+            <HardHat className="h-5 w-5" />
+          </div>
+          <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+            <span className="text-base font-bold tracking-tight text-foreground">
+              SMETAKON
+            </span>
+            <span className="text-[10px] text-muted-foreground -mt-0.5">
+              Admin panel
+            </span>
+          </div>
+        </Link>
+      </SidebarHeader>
+
+      <SidebarContent className="px-2">
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Tizim
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {systemNavItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                    className="transition-all duration-200"
+                  >
+                    <Link to={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator className="my-2" />
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Boshqaruv
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {visibleManagement.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                    className="transition-all duration-200"
+                  >
+                    <Link to={item.url}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {activeOrgId && (
+          <>
+            <SidebarSeparator className="my-2" />
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Kompaniya
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.includes(`/organizations/${activeOrgId}/users`)}
+                      tooltip="Xodimlar"
+                      className="transition-all duration-200"
+                    >
+                      <Link to={`/admin/organizations/${activeOrgId}/users`}>
+                        <Users className="h-4 w-4" />
+                        <span>Xodimlar</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.includes(`/organizations/${activeOrgId}/projects`)}
+                      tooltip="Loyihalar"
+                      className="transition-all duration-200"
+                    >
+                      <Link to={`/admin/organizations/${activeOrgId}/projects`}>
+                        <FolderOpen className="h-4 w-4" />
+                        <span>Loyihalar</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Sozlamalar">
+              <Link to="/admin/settings">
+                <Settings className="h-4 w-4" />
+                <span>Sozlamalar</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}

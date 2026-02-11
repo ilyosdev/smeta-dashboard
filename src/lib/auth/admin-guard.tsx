@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './auth-context';
 
-export function AuthGuard({ children }: { children: React.ReactNode }) {
+export function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -11,9 +11,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isLoading && !isAuthenticated) {
       navigate('/login', { state: { from: location }, replace: true });
     }
-    // Redirect admin users to /admin if they try to access vendor routes
-    if (!isLoading && isAuthenticated && isAdmin && !location.pathname.startsWith('/admin')) {
-      navigate('/admin', { replace: true });
+    if (!isLoading && isAuthenticated && !isAdmin) {
+      navigate('/', { replace: true });
     }
   }, [isLoading, isAuthenticated, isAdmin, navigate, location]);
 
@@ -28,7 +27,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !isAdmin) {
     return null;
   }
 

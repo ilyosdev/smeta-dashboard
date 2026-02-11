@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isAdmin: boolean;
   login: (phone: string, password: string) => Promise<void>;
   logout: () => void;
   refreshAuth: () => Promise<void>;
@@ -145,10 +146,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadUser();
   }, []);
 
+  const isAdmin = !!user && (user.role === 'SUPER_ADMIN' || user.role === 'OPERATOR');
+
   const value: AuthContextType = {
     user,
     isLoading,
     isAuthenticated: !!user,
+    isAdmin,
     login,
     logout,
     refreshAuth,

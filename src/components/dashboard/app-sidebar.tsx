@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import {
+  Banknote,
   Building2,
   ChartBar,
   ClipboardList,
@@ -72,6 +73,11 @@ const mainNavItems: NavItem[] = [
 ];
 
 const roleNavItems: NavItem[] = [
+  {
+    title: "Kassa",
+    url: "/kassa",
+    icon: Banknote,
+  },
   {
     title: "Moliya",
     url: "/finance",

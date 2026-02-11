@@ -2,8 +2,10 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './auth-context';
 
-// Role hierarchy: DIREKTOR has access to all roles below
+// Role hierarchy
 const ROLE_HIERARCHY: Record<string, string[]> = {
+  SUPER_ADMIN: ['SUPER_ADMIN', 'OPERATOR', 'DIREKTOR', 'BOSS', 'BUGALTERIYA', 'PTO', 'SNABJENIYA', 'SKLAD', 'PRORAB'],
+  OPERATOR: ['OPERATOR'],
   DIREKTOR: ['DIREKTOR', 'PRORAB', 'SNABJENIYA', 'SKLAD', 'BUGALTERIYA', 'PTO', 'BOSS'],
   BOSS: ['DIREKTOR', 'PRORAB', 'SNABJENIYA', 'SKLAD', 'BUGALTERIYA', 'PTO', 'BOSS'],
   PRORAB: ['PRORAB'],
@@ -29,7 +31,10 @@ export function canAccessRoute(userRole: string | undefined, pathname: string): 
 
   // Routes with role restrictions
   const routeRoles: Record<string, string[]> = {
+    '/admin/operators': ['SUPER_ADMIN'],
+    '/admin': ['SUPER_ADMIN', 'OPERATOR'],
     '/users': ['DIREKTOR', 'BOSS'],
+    '/kassa': ['DIREKTOR', 'BOSS', 'BUGALTERIYA', 'PTO', 'SNABJENIYA', 'SKLAD', 'PRORAB'],
     '/finance': ['DIREKTOR', 'BOSS', 'BUGALTERIYA'],
     '/warehouse': ['DIREKTOR', 'BOSS', 'SKLAD'],
     '/suppliers': ['DIREKTOR', 'BOSS', 'SNABJENIYA'],

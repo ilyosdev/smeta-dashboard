@@ -1,4 +1,6 @@
 export enum UserRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+  OPERATOR = 'OPERATOR',
   DIREKTOR = 'DIREKTOR',
   BOSS = 'BOSS',
   BUGALTERIYA = 'BUGALTERIYA',
@@ -9,6 +11,12 @@ export enum UserRole {
 }
 
 export const PERMISSIONS = {
+  // Admin
+  "admin:operators": ["SUPER_ADMIN"],
+  "admin:organizations": ["SUPER_ADMIN", "OPERATOR"],
+  "admin:org_users": ["SUPER_ADMIN", "OPERATOR"],
+  "admin:org_projects": ["SUPER_ADMIN", "OPERATOR"],
+
   // Organization
   "org:create": ["DIREKTOR"],
   "org:edit": ["DIREKTOR"],
@@ -161,6 +169,15 @@ export const PERMISSIONS = {
   // Debt Overview
   "debt:view": ["BOSS", "DIREKTOR", "BUGALTERIYA", "SNABJENIYA", "PRORAB"],
 
+  // Kassa (Personal Wallet)
+  "kassa:view": ["BOSS", "DIREKTOR", "BUGALTERIYA", "PTO", "SNABJENIYA", "SKLAD", "PRORAB"],
+  "kassa:request_money": ["BOSS", "DIREKTOR", "PTO", "SNABJENIYA", "SKLAD", "PRORAB"],
+  "kassa:add_expense": ["BOSS", "DIREKTOR", "BUGALTERIYA", "PTO", "SNABJENIYA", "SKLAD", "PRORAB"],
+
+  // Cash Requests
+  "cash_request:create": ["BOSS", "DIREKTOR", "PTO", "SNABJENIYA", "SKLAD", "PRORAB"],
+  "cash_request:approve": ["BOSS", "DIREKTOR", "BUGALTERIYA"],
+
   // Audit
   "audit:view": ["DIREKTOR", "BUGALTERIYA"],
 
@@ -202,6 +219,8 @@ export function canAssignRole(
   targetRole: UserRole
 ): boolean {
   const hierarchy: Record<UserRole, number> = {
+    SUPER_ADMIN: 10,
+    OPERATOR: 9,
     DIREKTOR: 7,
     BOSS: 6,
     BUGALTERIYA: 5,
@@ -211,6 +230,8 @@ export function canAssignRole(
     PRORAB: 3,
   };
 
+  if (assignerRole === "SUPER_ADMIN") return true;
+  if (assignerRole === "OPERATOR") return targetRole !== "SUPER_ADMIN" && targetRole !== "OPERATOR";
   if (assignerRole === "DIREKTOR") return true;
   if (targetRole === "DIREKTOR") return false;
   if (targetRole === "BOSS") return false;

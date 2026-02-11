@@ -1,6 +1,6 @@
 import { Suspense, useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { HardHat, Eye, EyeOff, Loader2, Send } from "lucide-react";
+import { HardHat, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,26 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4001';
-const TELEGRAM_BOT_ID = import.meta.env.VITE_TELEGRAM_BOT_ID;
-
 function LoginForm() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
   const errorParam = searchParams.get("error");
-  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { login, isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'OPERATOR';
 
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      navigate(callbackUrl, { replace: true });
+      navigate(isAdmin ? '/admin' : callbackUrl, { replace: true });
     }
-  }, [authLoading, isAuthenticated, callbackUrl, navigate]);
+  }, [authLoading, isAuthenticated, isAdmin, callbackUrl, navigate]);
 
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isTelegramLoading, setIsTelegramLoading] = useState(false);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -42,80 +39,11 @@ function LoginForm() {
 
     try {
       await login(fullPhone, password);
-      navigate(callbackUrl, { replace: true });
+      // Redirect will be handled by the useEffect above after user state updates
     } catch (err) {
       setError(err instanceof Error ? err.message : "Kirish xatoligi");
       setIsLoading(false);
     }
-  };
-
-  const handleTelegramLogin = async () => {
-    setIsTelegramLoading(true);
-    setError("");
-
-    if (!TELEGRAM_BOT_ID) {
-      setError("Telegram bot sozlanmagan");
-      setIsTelegramLoading(false);
-      return;
-    }
-
-    const authUrl = `https://oauth.telegram.org/auth?bot_id=${TELEGRAM_BOT_ID}&origin=${encodeURIComponent(window.location.origin)}&request_access=write&return_to=${encodeURIComponent(window.location.href)}`;
-
-    const width = 550;
-    const height = 470;
-    const left = (window.innerWidth - width) / 2;
-    const top = (window.innerHeight - height) / 2;
-
-    const popup = window.open(
-      authUrl,
-      "telegram_auth",
-      `width=${width},height=${height},left=${left},top=${top}`
-    );
-
-    const handleMessage = async (event: MessageEvent) => {
-      if (event.origin !== "https://oauth.telegram.org") return;
-
-      const data = event.data;
-      if (data?.event === "auth_result" && data?.result) {
-        window.removeEventListener("message", handleMessage);
-        popup?.close();
-
-        try {
-          const verifyResponse = await fetch(`${API_URL}/api/auth/telegram`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data.result),
-          });
-
-          if (!verifyResponse.ok) {
-            const errorData = await verifyResponse.json();
-            throw new Error(errorData.error || "Telegram tekshiruvda xatolik");
-          }
-
-          const response = await verifyResponse.json();
-
-          if (response.accessToken && response.refreshToken) {
-            await login(response.user.phone, '');
-            navigate(callbackUrl, { replace: true });
-          } else {
-            setError("Telegram orqali kirish xatoligi");
-          }
-        } catch (err) {
-          setError(err instanceof Error ? err.message : "Xatolik yuz berdi");
-        }
-      }
-      setIsTelegramLoading(false);
-    };
-
-    window.addEventListener("message", handleMessage);
-
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        window.removeEventListener("message", handleMessage);
-        setIsTelegramLoading(false);
-      }
-    }, 500);
   };
 
   const formatPhone = (value: string) => {
@@ -244,43 +172,6 @@ function LoginForm() {
             )}
           </Button>
         </form>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-muted-foreground/20" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-3 text-muted-foreground font-medium">yoki</span>
-          </div>
-        </div>
-
-        <Button
-          type="button"
-          onClick={handleTelegramLogin}
-          disabled={isTelegramLoading}
-          className="w-full h-11 bg-[#0088cc] hover:bg-[#0077b5] text-white shadow-lg shadow-[#0088cc]/25 transition-all duration-300"
-        >
-          {isTelegramLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Telegram...
-            </>
-          ) : (
-            <>
-              <Send className="mr-2 h-4 w-4" />
-              Telegram orqali kirish
-            </>
-          )}
-        </Button>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Hisobingiz yo'qmi?{" "}
-            <Link to="/register" className="text-primary hover:underline font-medium">
-              Ro'yxatdan o'ting
-            </Link>
-          </p>
-        </div>
 
         <div className="mt-6 pt-6 border-t text-center">
           <p className="text-xs text-muted-foreground">
