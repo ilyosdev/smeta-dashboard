@@ -10,6 +10,8 @@ export enum UserRole {
   PRORAB = 'PRORAB',
   HAYDOVCHI = 'HAYDOVCHI',
   MODERATOR = 'MODERATOR',
+  WORKER = 'WORKER',
+  POSTAVSHIK = 'POSTAVSHIK',
 }
 
 export const PERMISSIONS = {
@@ -198,6 +200,28 @@ export const PERMISSIONS = {
   // Telegram
   "telegram:connect": ["DIREKTOR"],
   "telegram:disconnect": ["DIREKTOR"],
+
+  // Worker Portal
+  "worker_portal:view": ["WORKER"],
+  "worker_portal:work_logs": ["WORKER"],
+  "worker_portal:payments": ["WORKER"],
+
+  // Supplier Portal
+  "supplier_portal:view": ["POSTAVSHIK"],
+  "supplier_portal:orders": ["POSTAVSHIK"],
+  "supplier_portal:debts": ["POSTAVSHIK"],
+
+  // Driver
+  "driver:view_assigned": ["HAYDOVCHI"],
+  "driver:mark_collected": ["HAYDOVCHI"],
+  "driver:mark_delivered": ["HAYDOVCHI"],
+
+  // Moderator
+  "moderator:view_pending": ["MODERATOR"],
+  "moderator:finalize": ["MODERATOR"],
+
+  // Smeta Comparison
+  "smeta_comparison:view": ["DIREKTOR", "BOSS", "PTO", "BUGALTERIYA"],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -232,6 +256,8 @@ export function canAssignRole(
     MODERATOR: 4,
     PRORAB: 3,
     HAYDOVCHI: 2,
+    WORKER: 1,
+    POSTAVSHIK: 1,
   };
 
   if (assignerRole === "SUPER_ADMIN") return true;

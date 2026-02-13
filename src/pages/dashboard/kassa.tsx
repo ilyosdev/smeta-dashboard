@@ -7,6 +7,11 @@ import {
   HandCoins,
   PlusCircle,
   Eye,
+  Users,
+  CheckCircle,
+  XCircle,
+  Clock,
+  User,
 } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import {
@@ -36,7 +41,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useApi, useMutation } from "@/hooks/use-api";
-import { useAuth } from "@/lib/auth";
+import { useAuth, hasRole } from "@/lib/auth";
+import { Badge } from "@/components/ui/badge";
 import {
   cashRegistersApi,
   cashRequestsApi,
@@ -52,16 +58,19 @@ function formatMoney(num: number): string {
   return num.toLocaleString("uz-UZ");
 }
 
-type ActiveView = "balance" | "history" | "expenses";
+type ActiveView = "balance" | "history" | "expenses" | "requests";
 
 export default function KassaPage() {
   const { user } = useAuth();
   const role = user?.role;
   const canRequestMoney = role !== "BUGALTERIYA";
+  const isBugalteriya = hasRole(role, ["BUGALTERIYA", "DIREKTOR", "BOSS"]);
 
   const [activeView, setActiveView] = useState<ActiveView>("balance");
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   // Date filter state
   const [dateFrom, setDateFrom] = useState("");
@@ -113,6 +122,50 @@ export default function KassaPage() {
     { enabled: activeView === "expenses" && !!koshelok }
   );
 
+  // Cash requests (for BUGALTERIYA)
+  const {
+    data: cashRequestsData,
+    loading: cashRequestsLoading,
+    refetch: refetchCashRequests,
+  } = useApi(
+    () => cashRequestsApi.getAll({ status: "PENDING", limit: 50 }),
+    [],
+    { enabled: isBugalteriya && activeView === "requests" }
+  );
+
+  // Mutations for approve/reject
+  const { mutate: approveCashRequest, loading: approvingId } = useMutation(
+    (id: string) => cashRequestsApi.approve(id)
+  );
+
+  const { mutate: rejectCashRequest, loading: rejectingId } = useMutation(
+    ({ id, reason }: { id: string; reason: string }) =>
+      cashRequestsApi.reject(id, { rejectionReason: reason })
+  );
+
+  const pendingCashRequests = cashRequestsData?.data || [];
+
+  const handleApprove = async (id: string) => {
+    try {
+      await approveCashRequest(id);
+      refetchCashRequests();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectDialogOpen || !rejectReason.trim()) return;
+    try {
+      await rejectCashRequest({ id: rejectDialogOpen, reason: rejectReason });
+      setRejectDialogOpen(null);
+      setRejectReason("");
+      refetchCashRequests();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
   if (koshelokError) {
     return (
       <div className="space-y-6 animate-fade-in">
@@ -163,7 +216,7 @@ export default function KassaPage() {
       )}
 
       {/* Action buttons */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <ActionButton
           icon={Wallet}
           label="Balans"
@@ -194,6 +247,15 @@ export default function KassaPage() {
           label="Rasxod qo'shish"
           onClick={() => setExpenseDialogOpen(true)}
         />
+        {isBugalteriya && (
+          <ActionButton
+            icon={Users}
+            label="Pul so'rovlari"
+            active={activeView === "requests"}
+            onClick={() => setActiveView("requests")}
+            badge={pendingCashRequests.length > 0 ? pendingCashRequests.length : undefined}
+          />
+        )}
       </div>
 
       {/* Date filters for history/expenses */}
@@ -256,6 +318,124 @@ export default function KassaPage() {
           type="OUT"
         />
       )}
+      {activeView === "requests" && isBugalteriya && (
+        <Card className="animate-slide-up">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Users className="h-4 w-4 text-warning" />
+              Pul so'rovlari
+            </CardTitle>
+            <CardDescription>Xodimlardan kelgan so'rovlar</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {cashRequestsLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-24 bg-muted/50 rounded-lg animate-pulse" />
+                ))}
+              </div>
+            ) : pendingCashRequests.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50 text-success" />
+                <p>Hozircha pul so'rovlari yo'q</p>
+                <p className="text-sm mt-1">Barcha so'rovlar ko'rib chiqilgan</p>
+              </div>
+            ) : (
+              pendingCashRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="p-4 rounded-lg border bg-card space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <p className="font-medium">{request.requestedBy?.name || "Noma'lum"}</p>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {request.project?.name || "Loyiha"}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-warning/10 text-warning shrink-0">
+                      <Clock className="h-3 w-3 mr-1" />
+                      Kutilmoqda
+                    </Badge>
+                  </div>
+                  <div className="p-3 rounded bg-muted/30">
+                    <p className="text-2xl font-bold text-primary">
+                      {formatMoney(request.amount)} so'm
+                    </p>
+                    {request.reason && (
+                      <p className="text-sm text-muted-foreground mt-1">{request.reason}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(request.createdAt).toLocaleString("uz-UZ")}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setRejectDialogOpen(request.id)}
+                        disabled={!!approvingId || !!rejectingId}
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Rad etish
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleApprove(request.id)}
+                        disabled={!!approvingId || !!rejectingId}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Tasdiqlash
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Reject request dialog */}
+      <Dialog open={!!rejectDialogOpen} onOpenChange={() => setRejectDialogOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>So'rovni rad etish</DialogTitle>
+            <DialogDescription>
+              Rad etish sababini kiriting
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Sabab *</Label>
+              <Textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Nima uchun rad etilayotganini yozing..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(null)}>
+              Bekor qilish
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={!!rejectingId || !rejectReason.trim()}
+            >
+              <XCircle className="h-4 w-4 mr-1" />
+              {rejectingId ? "Saqlanmoqda..." : "Rad etish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Request money dialog */}
       {canRequestMoney && (
@@ -290,20 +470,30 @@ function ActionButton({
   label,
   active,
   onClick,
+  badge,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   active?: boolean;
   onClick: () => void;
+  badge?: number;
 }) {
   return (
     <Button
       variant={active ? "default" : "outline"}
-      className="h-auto py-3 flex flex-col gap-1.5 items-center"
+      className="h-auto py-3 flex flex-col gap-1.5 items-center relative"
       onClick={onClick}
     >
       <Icon className="h-5 w-5" />
       <span className="text-xs">{label}</span>
+      {badge !== undefined && badge > 0 && (
+        <Badge
+          variant="destructive"
+          className="absolute -top-1 -right-1 h-5 min-w-5 px-1.5 text-xs"
+        >
+          {badge}
+        </Badge>
+      )}
     </Button>
   );
 }

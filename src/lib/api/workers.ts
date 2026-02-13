@@ -219,4 +219,52 @@ export const workersApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Enhanced validation methods
+  validateWithPrice: (id: string, data: { unitPrice: number; totalAmount: number }) =>
+    apiClient<WorkLog>(`/vendor/workers/work-logs/${id}/validate-with-price`, {
+      method: 'POST',
+      body: JSON.stringify({ isValidated: true, ...data }),
+    }),
+
+  rejectWorkLog: (id: string, data: { reason: string }) =>
+    apiClient<WorkLog>(`/vendor/workers/work-logs/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Worker portal methods (for WORKER role)
+  getMyWorkLogs: (params?: GetWorkLogsParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.startDate) searchParams.append('startDate', params.startDate);
+    if (params?.endDate) searchParams.append('endDate', params.endDate);
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<WorkLog>>(
+      `/vendor/workers/my/work-logs${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  getMyPayments: (params?: GetWorkerPaymentsParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.startDate) searchParams.append('startDate', params.startDate);
+    if (params?.endDate) searchParams.append('endDate', params.endDate);
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<WorkerPayment>>(
+      `/vendor/workers/my/payments${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  getMyBalance: () =>
+    apiClient<{ totalEarned: number; totalPaid: number; netBalance: number }>(
+      '/vendor/workers/my/balance',
+      { method: 'GET' }
+    ),
 };

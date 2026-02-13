@@ -14,6 +14,11 @@ import {
   Truck,
   CheckSquare,
   UserCircle,
+  Car,
+  Shield,
+  Briefcase,
+  Store,
+  BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
@@ -107,6 +112,36 @@ const roleNavItems: NavItem[] = [
     url: "/validation",
     icon: CheckSquare,
     roles: ["DIREKTOR", "BOSS", "PTO"],
+  },
+  {
+    title: "Yetkazish",
+    url: "/driver",
+    icon: Car,
+    roles: ["HAYDOVCHI"],
+  },
+  {
+    title: "Moderatsiya",
+    url: "/moderator",
+    icon: Shield,
+    roles: ["MODERATOR"],
+  },
+  {
+    title: "Mening ishlarim",
+    url: "/worker-portal",
+    icon: Briefcase,
+    roles: ["WORKER"],
+  },
+  {
+    title: "Ta'minotchi",
+    url: "/supplier-portal",
+    icon: Store,
+    roles: ["POSTAVSHIK"],
+  },
+  {
+    title: "Smeta taqqoslash",
+    url: "/smeta-comparison",
+    icon: BarChart3,
+    roles: ["DIREKTOR", "BOSS", "PTO", "BUGALTERIYA"],
   },
 ];
 

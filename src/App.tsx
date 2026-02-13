@@ -24,6 +24,11 @@ import ReportsPage from '@/pages/dashboard/reports';
 import SettingsPage from '@/pages/dashboard/settings';
 import ValidationPage from '@/pages/dashboard/validation';
 import SmetaDetailPage from '@/pages/dashboard/smetas/[id]';
+import DriverPage from '@/pages/dashboard/driver';
+import ModeratorPage from '@/pages/dashboard/moderator';
+import WorkerPortalPage from '@/pages/dashboard/worker-portal';
+import SupplierPortalPage from '@/pages/dashboard/supplier-portal';
+import SmetaComparisonPage from '@/pages/dashboard/smeta-comparison';
 
 // Admin pages
 import AdminHomePage from '@/pages/admin/index';
@@ -79,6 +84,11 @@ function App() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/validation" element={<ValidationPage />} />
         <Route path="/smetas/:id" element={<SmetaDetailPage />} />
+        <Route path="/driver" element={<DriverPage />} />
+        <Route path="/moderator" element={<ModeratorPage />} />
+        <Route path="/worker-portal" element={<WorkerPortalPage />} />
+        <Route path="/supplier-portal" element={<SupplierPortalPage />} />
+        <Route path="/smeta-comparison" element={<SmetaComparisonPage />} />
       </Route>
 
       {/* Fallback */}

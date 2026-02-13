@@ -97,4 +97,28 @@ export const smetaItemsApi = {
     apiClient<void>(`/vendor/smeta-items/${id}`, {
       method: 'DELETE',
     }),
+
+  // Smeta comparison
+  getComparison: (projectId: string) =>
+    apiClient<{
+      items: Array<{
+        id: string;
+        name: string;
+        unit: string;
+        smetaQty: number;
+        smetaPrice: number;
+        smetaTotal: number;
+        usedQty: number;
+        actualSpent: number;
+        percentUsed: number;
+      }>;
+      summary: {
+        totalBudget: number;
+        totalSpent: number;
+        savings: number;
+        completion: number;
+      };
+    }>(`/vendor/smeta-items/comparison/${projectId}`, {
+      method: 'GET',
+    }),
 };

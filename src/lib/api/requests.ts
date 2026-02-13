@@ -129,4 +129,51 @@ export const requestsApi = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+
+  // Delivery workflow methods
+  assignDriver: (id: string, driverId: string) =>
+    apiClient<PurchaseRequest>(`/vendor/requests/${id}/assign-driver`, {
+      method: 'POST',
+      body: JSON.stringify({ driverId }),
+    }),
+
+  markCollected: (id: string, data: { collectedQty: number; note?: string }) =>
+    apiClient<PurchaseRequest>(`/vendor/requests/${id}/collected`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  markDelivered: (id: string, data: { deliveredQty: number; note?: string }) =>
+    apiClient<PurchaseRequest>(`/vendor/requests/${id}/delivered`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  confirmReceipt: (id: string, data: { receivedQty: number; note?: string }) =>
+    apiClient<PurchaseRequest>(`/vendor/requests/${id}/receive`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  finalize: (id: string, data: { finalAmount: number; finalUnitPrice: number }) =>
+    apiClient<PurchaseRequest>(`/vendor/requests/${id}/finalize`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getByDriver: (status?: string) => {
+    const searchParams = new URLSearchParams();
+    if (status) searchParams.append('status', status);
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<PurchaseRequest>>(
+      `/vendor/requests/driver${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  getPendingFinalization: () =>
+    apiClient<PaginatedResponse<PurchaseRequest>>(
+      '/vendor/requests?status=RECEIVED',
+      { method: 'GET' }
+    ),
 };

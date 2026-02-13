@@ -176,4 +176,43 @@ export const warehousesApi = {
     apiClient<WarehouseTransfer>(`/vendor/warehouses/transfers/${id}/cancel`, {
       method: 'POST',
     }),
+
+  // Enhanced warehouse operations
+  getAllItems: (params?: { warehouseId?: string; search?: string } & PaginationParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.warehouseId) searchParams.append('warehouseId', params.warehouseId);
+    if (params?.search) searchParams.append('search', params.search);
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<WarehouseItem>>(
+      `/vendor/warehouses/items/all${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  addItem: (warehouseId: string, data: { smetaItemId: string; quantity: number; note?: string; photo?: string }) =>
+    apiClient<WarehouseItem>(`/vendor/warehouses/${warehouseId}/items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  removeItem: (warehouseId: string, data: { smetaItemId: string; quantity: number; reason: string }) =>
+    apiClient<WarehouseItem>(`/vendor/warehouses/${warehouseId}/items/remove`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  transferItem: (data: { fromWarehouseId: string; toWarehouseId: string; smetaItemId: string; quantity: number }) =>
+    apiClient<WarehouseTransfer>('/vendor/warehouses/transfers/quick', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, transferDate: new Date().toISOString() }),
+    }),
+
+  receiveDelivery: (requestId: string, data: { receivedQty: number; note?: string; photo?: string }) =>
+    apiClient<{ success: boolean }>(`/vendor/warehouses/receive-delivery/${requestId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

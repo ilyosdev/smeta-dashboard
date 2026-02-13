@@ -1,17 +1,91 @@
-import { Package, ArrowDownToLine, ArrowUpFromLine, ArrowLeftRight, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import {
+  Package,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  ArrowLeftRight,
+  Plus,
+  Minus,
+  History,
+  Search,
+  Warehouse,
+  Boxes,
+} from "lucide-react";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useApi } from "@/hooks/use-api";
-import { warehousesApi } from "@/lib/api/warehouses";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useApi, useMutation } from "@/hooks/use-api";
+import { warehousesApi, Warehouse as WarehouseType, WarehouseTransfer } from "@/lib/api/warehouses";
+import { smetaItemsApi, SmetaItem } from "@/lib/api/smeta-items";
 import { StatsSkeleton } from "@/components/ui/table-skeleton";
 import { ErrorMessage } from "@/components/ui/error-message";
+import { useAuth, hasRole } from "@/lib/auth";
 
 function formatNumber(num: number): string {
   return num.toLocaleString("uz-UZ");
 }
 
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("uz-UZ", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+type DialogType = "add" | "remove" | "transfer" | null;
+
 export default function WarehousePage() {
+  const { user } = useAuth();
+  const isSklad = hasRole(user?.role, ["SKLAD", "DIREKTOR"]);
+
+  const [activeTab, setActiveTab] = useState("warehouses");
+  const [activeDialog, setActiveDialog] = useState<DialogType>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Dialog form state
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const [targetWarehouse, setTargetWarehouse] = useState("");
+  const [selectedItem, setSelectedItem] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [note, setNote] = useState("");
+
+  // Fetch warehouses
   const {
     data: warehousesResponse,
     loading: warehousesLoading,
@@ -19,16 +93,89 @@ export default function WarehousePage() {
     refetch: refetchWarehouses,
   } = useApi(() => warehousesApi.getAll({ limit: 100 }), []);
 
+  // Fetch transfers
   const {
     data: transfersResponse,
     loading: transfersLoading,
-  } = useApi(() => warehousesApi.getTransfers({ status: "PENDING", limit: 10 }), []);
+    refetch: refetchTransfers,
+  } = useApi(() => warehousesApi.getTransfers({ limit: 50 }), []);
+
+  // Fetch smeta items for add item dialog
+  const {
+    data: smetaItemsResponse,
+    loading: smetaItemsLoading,
+  } = useApi(
+    () => smetaItemsApi.getAll({ limit: 500 }),
+    [],
+    { enabled: activeDialog === "add" || activeDialog === "transfer" }
+  );
+
+  // Mutations
+  const { mutate: createItem, loading: creatingItem } = useMutation(
+    (data: { warehouseId: string; smetaItemId: string; quantity: number }) =>
+      warehousesApi.createItem(data)
+  );
+
+  const { mutate: createTransfer, loading: creatingTransfer } = useMutation(
+    (data: { fromWarehouseId: string; toWarehouseId: string; smetaItemId: string; quantity: number; transferDate: string }) =>
+      warehousesApi.createTransfer(data)
+  );
 
   const loading = warehousesLoading || transfersLoading;
   const error = warehousesError;
 
   const warehouses = warehousesResponse?.data || [];
-  const pendingTransfers = transfersResponse?.data || [];
+  const allTransfers = transfersResponse?.data || [];
+  const pendingTransfers = allTransfers.filter((t) => t.status === "PENDING");
+  const completedTransfers = allTransfers.filter((t) => t.status === "COMPLETED");
+  const smetaItems = smetaItemsResponse?.data || [];
+
+  // Filter smeta items by search
+  const filteredSmetaItems = smetaItems.filter((item: SmetaItem) =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const resetDialog = () => {
+    setActiveDialog(null);
+    setSelectedWarehouse("");
+    setTargetWarehouse("");
+    setSelectedItem("");
+    setQuantity("");
+    setNote("");
+    setSearchQuery("");
+  };
+
+  const handleAddItem = async () => {
+    if (!selectedWarehouse || !selectedItem || !quantity) return;
+    try {
+      await createItem({
+        warehouseId: selectedWarehouse,
+        smetaItemId: selectedItem,
+        quantity: Number(quantity),
+      });
+      resetDialog();
+      refetchWarehouses();
+    } catch {
+      // Error handled by mutation
+    }
+  };
+
+  const handleTransfer = async () => {
+    if (!selectedWarehouse || !targetWarehouse || !selectedItem || !quantity) return;
+    try {
+      await createTransfer({
+        fromWarehouseId: selectedWarehouse,
+        toWarehouseId: targetWarehouse,
+        smetaItemId: selectedItem,
+        quantity: Number(quantity),
+        transferDate: new Date().toISOString(),
+      });
+      resetDialog();
+      refetchTransfers();
+    } catch {
+      // Error handled by mutation
+    }
+  };
 
   if (error) {
     return (
@@ -44,9 +191,27 @@ export default function WarehousePage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">Ombor</h1>
-        <p className="text-muted-foreground">Materiallar va inventar holati</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight">Ombor</h1>
+          <p className="text-muted-foreground">Materiallar va inventar holati</p>
+        </div>
+        {isSklad && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setActiveDialog("add")}>
+              <Plus className="h-4 w-4 mr-1" />
+              Material qo'shish
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveDialog("remove")}>
+              <Minus className="h-4 w-4 mr-1" />
+              Material chiqarish
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveDialog("transfer")}>
+              <ArrowLeftRight className="h-4 w-4 mr-1" />
+              O'tkazma
+            </Button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -57,9 +222,17 @@ export default function WarehousePage() {
             title="Jami omborlar"
             value={warehouses.length}
             subtitle="ta"
-            icon={Package}
+            icon={Warehouse}
             variant="primary"
             className="animate-slide-up stagger-1"
+          />
+          <StatsCard
+            title="Kutilayotgan o'tkazma"
+            value={pendingTransfers.length}
+            subtitle="ta"
+            icon={ArrowLeftRight}
+            variant="warning"
+            className="animate-slide-up stagger-2"
           />
           <StatsCard
             title="Bugun kirim"
@@ -67,102 +240,445 @@ export default function WarehousePage() {
             subtitle="ta yetkazma"
             icon={ArrowDownToLine}
             variant="success"
-            className="animate-slide-up stagger-2"
+            className="animate-slide-up stagger-3"
           />
           <StatsCard
             title="Bugun chiqim"
             value={0}
             subtitle="ta berish"
             icon={ArrowUpFromLine}
-            variant="warning"
-            className="animate-slide-up stagger-3"
-          />
-          <StatsCard
-            title="Kutilmoqda"
-            value={pendingTransfers.length}
-            subtitle="ta o'tkazma"
-            icon={ArrowLeftRight}
             variant="default"
             className="animate-slide-up stagger-4"
           />
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2 animate-slide-up" style={{ animationDelay: "0.2s" }}>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Package className="h-4 w-4 text-primary" />
-              Omborlar
-            </CardTitle>
-            <CardDescription>Mavjud omborlar ro'yxati</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {warehousesLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
-                ))}
-              </div>
-            ) : warehouses.length > 0 ? (
-              warehouses.map((warehouse) => (
-                <div key={warehouse.id} className="p-4 rounded-lg border bg-card space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{warehouse.name}</p>
-                    {warehouse.location && (
-                      <Badge variant="secondary">{warehouse.location}</Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Yaratilgan: {new Date(warehouse.createdAt).toLocaleDateString("uz-UZ")}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Hozircha omborlar yo'q
-              </p>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="warehouses" className="flex items-center gap-2">
+            <Warehouse className="h-4 w-4" />
+            Omborlar
+          </TabsTrigger>
+          <TabsTrigger value="inventory" className="flex items-center gap-2">
+            <Boxes className="h-4 w-4" />
+            Inventar
+          </TabsTrigger>
+          <TabsTrigger value="operations" className="flex items-center gap-2">
+            <History className="h-4 w-4" />
+            Operatsiyalar
+            {pendingTransfers.length > 0 && (
+              <Badge variant="secondary" className="ml-1 bg-warning/10 text-warning">
+                {pendingTransfers.length}
+              </Badge>
             )}
-          </CardContent>
-        </Card>
+          </TabsTrigger>
+        </TabsList>
 
-        <Card className="animate-slide-up" style={{ animationDelay: "0.3s" }}>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <ArrowLeftRight className="h-4 w-4 text-warning" />
-              Kutilayotgan o'tkazmalar
-            </CardTitle>
-            <CardDescription>Tasdiqlash kerak</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {transfersLoading ? (
-              <div className="space-y-3">
-                {[1, 2].map((i) => (
-                  <div key={i} className="h-20 bg-muted/50 rounded-lg animate-pulse" />
-                ))}
-              </div>
-            ) : pendingTransfers.length > 0 ? (
-              pendingTransfers.map((transfer) => (
-                <div key={transfer.id} className="p-3 rounded-lg border bg-warning/5 border-warning/20">
-                  <div className="flex items-center gap-2 text-sm mb-2">
-                    <Badge variant="outline">#{transfer.fromWarehouseId.slice(0, 6)}</Badge>
-                    <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
-                    <Badge variant="outline">#{transfer.toWarehouseId.slice(0, 6)}</Badge>
-                  </div>
-                  <p className="font-medium text-sm">Item: {transfer.smetaItemId.slice(0, 8)}...</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatNumber(transfer.quantity)} ta
-                  </p>
+        <TabsContent value="warehouses" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Warehouse className="h-4 w-4 text-primary" />
+                Omborlar ro'yxati
+              </CardTitle>
+              <CardDescription>Mavjud omborlar</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {warehousesLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+                  ))}
                 </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Kutilayotgan o'tkazma yo'q
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ) : warehouses.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Hozircha omborlar yo'q</p>
+                  <p className="text-sm mt-1">Yangi ombor qo'shish uchun sozlamalarga o'ting</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {warehouses.map((warehouse: WarehouseType) => (
+                    <div key={warehouse.id} className="p-4 rounded-lg border bg-card">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{warehouse.name}</p>
+                          {warehouse.location && (
+                            <p className="text-sm text-muted-foreground">{warehouse.location}</p>
+                          )}
+                        </div>
+                        <Badge variant="outline">
+                          {formatDate(warehouse.createdAt)}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="inventory" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Boxes className="h-4 w-4 text-primary" />
+                Inventar
+              </CardTitle>
+              <CardDescription>Barcha ombordagi materiallar</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-muted-foreground">
+                <Boxes className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Inventar ma'lumotlarini ko'rish uchun</p>
+                <p className="text-sm mt-1">omborni tanlang</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="operations" className="mt-4">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <ArrowLeftRight className="h-4 w-4 text-warning" />
+                  Kutilayotgan o'tkazmalar
+                </CardTitle>
+                <CardDescription>Tasdiqlash kerak</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {transfersLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-20 bg-muted/50 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                ) : pendingTransfers.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <ArrowLeftRight className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">Kutilayotgan o'tkazma yo'q</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {pendingTransfers.map((transfer: WarehouseTransfer) => (
+                      <div key={transfer.id} className="p-3 rounded-lg border bg-warning/5 border-warning/20">
+                        <div className="flex items-center gap-2 text-sm mb-2">
+                          <Badge variant="outline">#{transfer.fromWarehouseId.slice(0, 6)}</Badge>
+                          <ArrowLeftRight className="h-3 w-3 text-muted-foreground" />
+                          <Badge variant="outline">#{transfer.toWarehouseId.slice(0, 6)}</Badge>
+                        </div>
+                        <p className="font-medium text-sm">Item: {transfer.smetaItemId.slice(0, 8)}...</p>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {formatNumber(transfer.quantity)} ta
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(transfer.transferDate)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <History className="h-4 w-4 text-success" />
+                  Tugallangan operatsiyalar
+                </CardTitle>
+                <CardDescription>Oxirgi o'tkazmalar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {transfersLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                ) : completedTransfers.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <History className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">Tugallangan o'tkazma yo'q</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {completedTransfers.slice(0, 5).map((transfer: WarehouseTransfer) => (
+                      <div key={transfer.id} className="p-3 rounded-lg border bg-success/5 border-success/10">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">
+                            {formatNumber(transfer.quantity)} ta
+                          </span>
+                          <Badge variant="secondary" className="bg-success/10 text-success text-xs">
+                            Tugallandi
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatDate(transfer.transferDate)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Add Item Dialog */}
+      <Dialog open={activeDialog === "add"} onOpenChange={() => resetDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Material qo'shish</DialogTitle>
+            <DialogDescription>Omborga yangi material qo'shing</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Ombor</Label>
+              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Omborni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((w: WarehouseType) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Material</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Qidirish..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Select value={selectedItem} onValueChange={setSelectedItem}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Materialni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredSmetaItems.slice(0, 20).map((item: SmetaItem) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} ({item.unit})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Miqdor</Label>
+              <Input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Miqdorni kiriting"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Izoh (ixtiyoriy)</Label>
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Qo'shimcha ma'lumot..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetDialog}>
+              Bekor qilish
+            </Button>
+            <Button
+              onClick={handleAddItem}
+              disabled={creatingItem || !selectedWarehouse || !selectedItem || !quantity}
+            >
+              {creatingItem ? "Saqlanmoqda..." : "Qo'shish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Item Dialog */}
+      <Dialog open={activeDialog === "remove"} onOpenChange={() => resetDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Material chiqarish</DialogTitle>
+            <DialogDescription>Ombordan material chiqarish</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Ombor</Label>
+              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Omborni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((w: WarehouseType) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Material</Label>
+              <Select value={selectedItem} onValueChange={setSelectedItem}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Materialni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {smetaItems.slice(0, 20).map((item: SmetaItem) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} ({item.unit})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Miqdor</Label>
+              <Input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Miqdorni kiriting"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Sabab</Label>
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Chiqarish sababi..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetDialog}>
+              Bekor qilish
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={resetDialog}
+              disabled={!selectedWarehouse || !selectedItem || !quantity}
+            >
+              Chiqarish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={activeDialog === "transfer"} onOpenChange={() => resetDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>O'tkazma</DialogTitle>
+            <DialogDescription>Bir ombordan boshqasiga o'tkazish</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Qayerdan</Label>
+              <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Manba omborni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((w: WarehouseType) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Qayerga</Label>
+              <Select value={targetWarehouse} onValueChange={setTargetWarehouse}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Maqsad omborni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses
+                    .filter((w: WarehouseType) => w.id !== selectedWarehouse)
+                    .map((w: WarehouseType) => (
+                      <SelectItem key={w.id} value={w.id}>
+                        {w.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Material</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Qidirish..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Select value={selectedItem} onValueChange={setSelectedItem}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Materialni tanlang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredSmetaItems.slice(0, 20).map((item: SmetaItem) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name} ({item.unit})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Miqdor</Label>
+              <Input
+                type="number"
+                min={1}
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Miqdorni kiriting"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={resetDialog}>
+              Bekor qilish
+            </Button>
+            <Button
+              onClick={handleTransfer}
+              disabled={creatingTransfer || !selectedWarehouse || !targetWarehouse || !selectedItem || !quantity}
+            >
+              {creatingTransfer ? "Saqlanmoqda..." : "O'tkazish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

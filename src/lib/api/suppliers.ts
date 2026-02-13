@@ -192,4 +192,43 @@ export const suppliersApi = {
     apiClient<void>(`/vendor/suppliers/orders/${id}`, {
       method: 'DELETE',
     }),
+
+  // Supplier portal methods (for POSTAVSHIK role)
+  getMyOrders: (params?: GetSupplierOrdersParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.status) searchParams.append('status', params.status);
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<SupplierOrder>>(
+      `/vendor/suppliers/my/orders${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  getMyDebts: (params?: GetSupplierDebtsParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.isPaid !== undefined) searchParams.append('isPaid', params.isPaid.toString());
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<SupplierDebt>>(
+      `/vendor/suppliers/my/debts${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
+
+  getMyPayments: (params?: PaginationParams) => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+
+    const query = searchParams.toString();
+    return apiClient<PaginatedResponse<SupplierDebt>>(
+      `/vendor/suppliers/my/payments${query ? `?${query}` : ''}`,
+      { method: 'GET' }
+    );
+  },
 };
