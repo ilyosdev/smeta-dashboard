@@ -8,6 +8,8 @@ export enum UserRole {
   SNABJENIYA = 'SNABJENIYA',
   SKLAD = 'SKLAD',
   PRORAB = 'PRORAB',
+  HAYDOVCHI = 'HAYDOVCHI',
+  MODERATOR = 'MODERATOR',
 }
 
 export const PERMISSIONS = {
@@ -227,7 +229,9 @@ export function canAssignRole(
     PTO: 5,
     SNABJENIYA: 5,
     SKLAD: 4,
+    MODERATOR: 4,
     PRORAB: 3,
+    HAYDOVCHI: 2,
   };
 
   if (assignerRole === "SUPER_ADMIN") return true;
