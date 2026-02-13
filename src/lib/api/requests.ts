@@ -20,7 +20,7 @@ export interface PurchaseRequest {
   requestedQty: number;
   requestedAmount: number;
   note?: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ASSIGNED' | 'COLLECTED' | 'IN_DELIVERY' | 'DELIVERED' | 'RECEIVED' | 'FINALIZED';
   requestedById: string;
   approvedById?: string;
   approvedAt?: string;
@@ -31,10 +31,14 @@ export interface PurchaseRequest {
   overrunPercent?: number;
   createdAt: string;
   updatedAt: string;
+  // Batch grouping (for requests created together)
+  batchId?: string;
   // Related data from JOINs
   smetaItem?: SmetaItemRelation;
   requestedBy?: UserRelation;
   approvedBy?: UserRelation | null;
+  // Project info
+  project?: { id: string; name: string };
 }
 
 export interface CreatePurchaseRequestRequest {

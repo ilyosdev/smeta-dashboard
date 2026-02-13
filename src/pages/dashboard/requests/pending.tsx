@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import {
   Clock,
   CheckCircle,
   XCircle,
   AlertTriangle,
   ClipboardCheck,
-  ArrowRight,
+  ArrowLeft,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ProgressBar } from "@/components/dashboard/progress-bar";
 import { AlertCard } from "@/components/dashboard/alert-card";
 import {
   Dialog,
@@ -21,73 +25,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { requestsApi, PurchaseRequest } from "@/lib/api/requests";
 
-const pendingRequests = [
-  {
-    id: "A7B3C9",
-    product: "Sement M400",
-    quantity: 1000,
-    unit: "kg",
-    unitPrice: 1200,
-    amount: 1200000,
-    isOverBudget: true,
-    overPercent: 17.6,
-    date: "2024-01-15 14:32",
-    user: "Abdullayev Jasur",
-    role: "Snabjenets",
-    project: "Navoiy 108-uy",
-    subProject: "A blok",
-    smeta: "Qurilish smetasi",
-    smetaData: {
-      total: 5000,
-      used: 4150,
-      remaining: 850,
-    },
-    note: "Zaxira uchun kerak, keyingi hafta katta ishlar boshlanadi",
-  },
-  {
-    id: "B8C4D0",
-    product: "G'isht M100",
-    quantity: 5000,
-    unit: "ta",
-    unitPrice: 800,
-    amount: 4000000,
-    isOverBudget: false,
-    date: "2024-01-15 13:15",
-    user: "Rahimov Bekzod",
-    role: "Smetachi",
-    project: "Navoiy 108-uy",
-    subProject: "B blok",
-    smeta: "Qurilish smetasi",
-    smetaData: {
-      total: 50000,
-      used: 37500,
-      remaining: 12500,
-    },
-    note: "Devor uchun zarur",
-  },
-  {
-    id: "F2G8H4",
-    product: "Sim elektr 2.5mm",
-    quantity: 500,
-    unit: "metr",
-    unitPrice: 3500,
-    amount: 1750000,
-    isOverBudget: false,
-    date: "2024-01-15 11:20",
-    user: "Toshmatov Sardor",
-    role: "Ishchi",
-    project: "Chilonzor 5-mavze",
-    subProject: "C blok",
-    smeta: "Elektr montaj",
-    smetaData: {
-      total: 2000,
-      used: 1200,
-      remaining: 800,
-    },
-    note: "",
-  },
-];
+// Group requests by batchId for batch display
+interface RequestGroup {
+  batchId: string | null;
+  requests: PurchaseRequest[];
+  totalAmount: number;
+  prorabName: string;
+}
 
 const formatCurrency = (value: number) => {
   if (value >= 1000000) {
@@ -101,160 +47,154 @@ const formatNumber = (value: number) => {
 };
 
 export default function PendingApprovalsPage() {
-  const [selectedRequest, setSelectedRequest] = useState<typeof pendingRequests[0] | null>(null);
+  const [requestGroups, setRequestGroups] = useState<RequestGroup[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<RequestGroup | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleApprove = (request: typeof pendingRequests[0]) => {
-    setDialogOpen(false);
+  const fetchPendingRequests = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await requestsApi.getAll({
+        status: "PENDING",
+        limit: 100,
+      });
+
+      // Group requests by batchId
+      const batchMap = new Map<string, RequestGroup>();
+      for (const req of response.data) {
+        const key = req.batchId || `single_${req.id}`;
+        if (!batchMap.has(key)) {
+          batchMap.set(key, {
+            batchId: req.batchId || null,
+            requests: [],
+            totalAmount: 0,
+            prorabName: req.requestedBy?.name || "Noma'lum",
+          });
+        }
+        const group = batchMap.get(key)!;
+        group.requests.push(req);
+        group.totalAmount += req.requestedAmount;
+      }
+
+      setRequestGroups(Array.from(batchMap.values()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "So'rovlarni yuklashda xatolik");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPendingRequests();
+  }, [fetchPendingRequests]);
+
+  const handleApprove = async (group: RequestGroup) => {
+    setIsApproving(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      // Approve all requests in the group
+      for (const request of group.requests) {
+        await requestsApi.approve(request.id);
+      }
+      setSuccessMessage(`${group.requests.length} ta so'rov muvaffaqiyatli tasdiqlandi`);
+      setDialogOpen(false);
+      fetchPendingRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Tasdiqlashda xatolik");
+    } finally {
+      setIsApproving(false);
+    }
   };
 
-  const handleReject = () => {
-    setRejectDialogOpen(false);
-    setDialogOpen(false);
-    setRejectReason("");
+  const handleReject = async () => {
+    if (!selectedGroup || !rejectReason.trim()) return;
+
+    setIsRejecting(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      // Reject all requests in the group
+      for (const request of selectedGroup.requests) {
+        await requestsApi.reject(request.id, rejectReason);
+      }
+      setSuccessMessage(`${selectedGroup.requests.length} ta so'rov rad etildi`);
+      setRejectDialogOpen(false);
+      setDialogOpen(false);
+      setRejectReason("");
+      fetchPendingRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Rad etishda xatolik");
+    } finally {
+      setIsRejecting(false);
+    }
   };
+
+  const totalPending = requestGroups.reduce((sum, g) => sum + g.requests.length, 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/requests">
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Orqaga
+              </Link>
+            </Button>
+          </div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <ClipboardCheck className="h-6 w-6 text-primary" />
             Kutilayotgan tasdiqlar
           </h1>
           <p className="text-muted-foreground">
-            {pendingRequests.length} ta so'rov sizning tasdiqingizni kutmoqda
+            {totalPending} ta so'rov ({requestGroups.length} ta guruh) sizning tasdiqingizni kutmoqda
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchPendingRequests} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${isLoading ? "animate-spin" : ""}`} />
+            Yangilash
+          </Button>
           <Badge className="bg-warning/10 text-warning px-3 py-1.5">
             <Clock className="h-4 w-4 mr-1" />
-            {pendingRequests.length} ta kutmoqda
+            {totalPending} ta kutmoqda
           </Badge>
         </div>
       </div>
 
-      <div className="grid gap-4">
-        {pendingRequests.map((request, index) => (
-          <Card
-            key={request.id}
-            className={`overflow-hidden transition-all duration-300 hover:shadow-lg cursor-pointer group animate-slide-up ${
-              request.isOverBudget
-                ? "border-l-4 border-l-warning hover:border-warning/50"
-                : "hover:border-primary/20"
-            }`}
-            style={{ animationDelay: `${index * 0.1}s` }}
-            onClick={() => {
-              setSelectedRequest(request);
-              setDialogOpen(true);
-            }}
-          >
-            <CardContent className="p-5">
-              <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-mono text-muted-foreground">
-                          #{request.id}
-                        </span>
-                        {request.isOverBudget && (
-                          <Badge variant="destructive" className="gap-1">
-                            <AlertTriangle className="h-3 w-3" />
-                            +{request.overPercent}% oshiq
-                          </Badge>
-                        )}
-                      </div>
-                      <h3 className="text-lg font-semibold mt-1 group-hover:text-primary transition-colors">
-                        {request.product}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {request.project} / {request.subProject} / {request.smeta}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-primary">
-                        {formatCurrency(request.amount)} so'm
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatNumber(request.quantity)} {request.unit}
-                      </p>
-                    </div>
-                  </div>
+      {error && (
+        <Card className="p-4 border-destructive bg-destructive/10">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-5 w-5" />
+            <span>{error}</span>
+          </div>
+        </Card>
+      )}
 
-                  <div className="flex flex-wrap items-center gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-[10px] font-semibold text-primary">
-                          {request.user.split(" ").map((n) => n[0]).join("")}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-xs">{request.user}</p>
-                        <p className="text-[10px] text-muted-foreground">{request.role}</p>
-                      </div>
-                    </div>
-                    <span className="text-muted-foreground">|</span>
-                    <span className="text-muted-foreground">{request.date}</span>
-                  </div>
+      {successMessage && (
+        <Card className="p-4 border-success bg-success/10">
+          <div className="flex items-center gap-2 text-success">
+            <CheckCircle className="h-5 w-5" />
+            <span>{successMessage}</span>
+          </div>
+        </Card>
+      )}
 
-                  {request.note && (
-                    <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
-                      "{request.note}"
-                    </p>
-                  )}
-                </div>
-
-                <div className="lg:w-64 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Smeta holati</span>
-                    <span className="font-medium">
-                      {formatNumber(request.smetaData.used)}/{formatNumber(request.smetaData.total)}{" "}
-                      {request.unit}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    value={request.smetaData.used + request.quantity}
-                    max={request.smetaData.total}
-                    size="sm"
-                    showLabel={false}
-                  />
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedRequest(request);
-                        setRejectDialogOpen(true);
-                      }}
-                    >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Rad
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="flex-1 bg-success hover:bg-success/90"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleApprove(request);
-                      }}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Tasdiqlash
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {pendingRequests.length === 0 && (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : requestGroups.length === 0 ? (
         <Card className="p-12">
           <div className="text-center space-y-3">
             <div className="flex justify-center">
@@ -266,110 +206,242 @@ export default function PendingApprovalsPage() {
             <p className="text-muted-foreground">Barcha so'rovlar ko'rib chiqilgan</p>
           </div>
         </Card>
+      ) : (
+        <div className="grid gap-4">
+          {requestGroups.map((group, index) => {
+            const isBatch = group.requests.length > 1;
+            const hasOverrun = group.requests.some((r) => r.isOverrun);
+            const firstRequest = group.requests[0];
+
+            return (
+              <Card
+                key={group.batchId || firstRequest.id}
+                className={`overflow-hidden transition-all duration-300 hover:shadow-lg cursor-pointer group animate-slide-up ${
+                  hasOverrun
+                    ? "border-l-4 border-l-warning hover:border-warning/50"
+                    : "hover:border-primary/20"
+                }`}
+                style={{ animationDelay: `${index * 0.1}s` }}
+                onClick={() => {
+                  setSelectedGroup(group);
+                  setDialogOpen(true);
+                }}
+              >
+                <CardContent className="p-5">
+                  <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isBatch && (
+                              <Badge variant="outline" className="gap-1">
+                                <Layers className="h-3 w-3" />
+                                {group.requests.length} ta material
+                              </Badge>
+                            )}
+                            {!isBatch && (
+                              <span className="text-xs font-mono text-muted-foreground">
+                                #{firstRequest.id.slice(0, 8)}
+                              </span>
+                            )}
+                            {hasOverrun && (
+                              <Badge variant="destructive" className="gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Smeta oshdi
+                              </Badge>
+                            )}
+                            {firstRequest.source === "TELEGRAM" && (
+                              <Badge variant="outline" className="text-xs">
+                                Telegram
+                              </Badge>
+                            )}
+                          </div>
+                          {isBatch ? (
+                            <>
+                              <h3 className="text-lg font-semibold mt-1 group-hover:text-primary transition-colors">
+                                Paket so'rov
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {group.requests.map((r) => r.smetaItem?.name || "Noma'lum").join(", ")}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <h3 className="text-lg font-semibold mt-1 group-hover:text-primary transition-colors">
+                                {firstRequest.smetaItem?.name || "Noma'lum material"}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                {formatNumber(firstRequest.requestedQty)} {firstRequest.smetaItem?.unit || ""}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-primary">
+                            {formatCurrency(group.totalAmount)} so'm
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(firstRequest.createdAt).toLocaleDateString("uz-UZ")}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                            <span className="text-[10px] font-semibold text-primary">
+                              {group.prorabName.split(" ").map((n) => n[0]).join("")}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-xs">{group.prorabName}</p>
+                            <p className="text-[10px] text-muted-foreground">Prorab</p>
+                          </div>
+                        </div>
+                        {firstRequest.project && (
+                          <>
+                            <span className="text-muted-foreground">|</span>
+                            <span className="text-muted-foreground">{firstRequest.project.name}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {firstRequest.note && !isBatch && (
+                        <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                          "{firstRequest.note}"
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="lg:w-48 space-y-2">
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedGroup(group);
+                            setRejectDialogOpen(true);
+                          }}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Rad
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-success hover:bg-success/90"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApprove(group);
+                          }}
+                          disabled={isApproving}
+                        >
+                          {isApproving ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                          )}
+                          Tasdiqlash
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
+      {/* Detail Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
-          {selectedRequest && (
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          {selectedGroup && (
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  So'rov #{selectedRequest.id}
+                  {selectedGroup.requests.length > 1 ? (
+                    <>
+                      <Layers className="h-5 w-5" />
+                      Paket so'rov ({selectedGroup.requests.length} ta material)
+                    </>
+                  ) : (
+                    <>So'rov #{selectedGroup.requests[0].id.slice(0, 8)}</>
+                  )}
                 </DialogTitle>
                 <DialogDescription>
-                  {selectedRequest.user} tomonidan yuborilgan
+                  {selectedGroup.prorabName} tomonidan yuborilgan
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4">
-                {selectedRequest.isOverBudget && (
+                {selectedGroup.requests.some((r) => r.isOverrun) && (
                   <AlertCard
                     type="warning"
                     title="Ogohlantirish"
-                    description={`Bu so'rov smeta chegarasidan ${selectedRequest.overPercent}% oshadi`}
+                    description="Ba'zi materiallar smeta chegarasidan oshadi"
                   />
                 )}
 
-                <Card className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-lg">{selectedRequest.product}</h4>
-                      <p className="font-bold text-primary">
-                        {formatNumber(selectedRequest.amount)} so'm
-                      </p>
+                {selectedGroup.requests.map((request, i) => (
+                  <Card key={request.id} className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold">{request.smetaItem?.name || "Noma'lum"}</h4>
+                          {request.isOverrun && (
+                            <Badge variant="destructive" className="mt-1 gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              +{request.overrunPercent}% oshiq
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="font-bold text-primary">
+                          {formatNumber(request.requestedAmount)} so'm
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Miqdor:</span>
+                          <span className="ml-2 font-medium">
+                            {formatNumber(request.requestedQty)} {request.smetaItem?.unit || ""}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Birlik narxi:</span>
+                          <span className="ml-2 font-medium">
+                            {formatNumber(request.smetaItem?.unitPrice || 0)} so'm
+                          </span>
+                        </div>
+                      </div>
+                      {request.note && (
+                        <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                          "{request.note}"
+                        </p>
+                      )}
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Miqdor:</span>
-                        <span className="ml-2 font-medium">
-                          {formatNumber(selectedRequest.quantity)} {selectedRequest.unit}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Birlik narxi:</span>
-                        <span className="ml-2 font-medium">
-                          {formatNumber(selectedRequest.unitPrice)} so'm
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-muted-foreground">SMETA HOLATI</p>
-                  <Card className="p-4 space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Jami:</span>
-                        <span>{formatNumber(selectedRequest.smetaData.total)} {selectedRequest.unit}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Ishlatilgan:</span>
-                        <span>{formatNumber(selectedRequest.smetaData.used)} {selectedRequest.unit}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Qolgan:</span>
-                        <span>{formatNumber(selectedRequest.smetaData.remaining)} {selectedRequest.unit}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">So'rov:</span>
-                        <span className="text-primary font-medium">
-                          {formatNumber(selectedRequest.quantity)} {selectedRequest.unit}
-                        </span>
-                      </div>
-                    </div>
-                    <ProgressBar
-                      value={selectedRequest.smetaData.used + selectedRequest.quantity}
-                      max={selectedRequest.smetaData.total}
-                    />
                   </Card>
-                </div>
+                ))}
 
-                <div className="text-sm space-y-1">
+                <div className="text-sm space-y-1 pt-2">
                   <p>
-                    <span className="text-muted-foreground">Manzil:</span>{" "}
-                    <span className="font-medium">
-                      {selectedRequest.project} - {selectedRequest.subProject} - {selectedRequest.smeta}
+                    <span className="text-muted-foreground">Jami summa:</span>{" "}
+                    <span className="font-bold text-primary">
+                      {formatNumber(selectedGroup.totalAmount)} so'm
                     </span>
                   </p>
                   <p>
                     <span className="text-muted-foreground">So'ragan:</span>{" "}
-                    <span className="font-medium">
-                      {selectedRequest.user} ({selectedRequest.role})
-                    </span>
+                    <span className="font-medium">{selectedGroup.prorabName}</span>
                   </p>
                   <p>
                     <span className="text-muted-foreground">Sana:</span>{" "}
-                    <span className="font-medium">{selectedRequest.date}</span>
+                    <span className="font-medium">
+                      {new Date(selectedGroup.requests[0].createdAt).toLocaleDateString("uz-UZ")}
+                    </span>
                   </p>
                 </div>
-
-                {selectedRequest.note && (
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Izoh</p>
-                    <p className="text-sm bg-muted/50 p-3 rounded-lg">"{selectedRequest.note}"</p>
-                  </div>
-                )}
               </div>
 
               <DialogFooter className="gap-2">
@@ -379,15 +451,21 @@ export default function PendingApprovalsPage() {
                   onClick={() => {
                     setRejectDialogOpen(true);
                   }}
+                  disabled={isRejecting}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
                   Rad etish
                 </Button>
                 <Button
                   className="bg-success hover:bg-success/90"
-                  onClick={() => handleApprove(selectedRequest)}
+                  onClick={() => handleApprove(selectedGroup)}
+                  disabled={isApproving}
                 >
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {isApproving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                  )}
                   Tasdiqlash
                 </Button>
               </DialogFooter>
@@ -396,6 +474,7 @@ export default function PendingApprovalsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -404,7 +483,11 @@ export default function PendingApprovalsPage() {
               So'rovni rad etish
             </DialogTitle>
             <DialogDescription>
-              #{selectedRequest?.id} - {selectedRequest?.product}
+              {selectedGroup && (
+                selectedGroup.requests.length > 1
+                  ? `${selectedGroup.requests.length} ta material rad etiladi`
+                  : `${selectedGroup.requests[0].smetaItem?.name || "Noma'lum"}`
+              )}
             </DialogDescription>
           </DialogHeader>
 
@@ -428,9 +511,13 @@ export default function PendingApprovalsPage() {
             <Button
               variant="destructive"
               onClick={handleReject}
-              disabled={!rejectReason.trim()}
+              disabled={!rejectReason.trim() || isRejecting}
             >
-              <XCircle className="h-4 w-4 mr-2" />
+              {isRejecting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4 mr-2" />
+              )}
               Rad etish
             </Button>
           </DialogFooter>

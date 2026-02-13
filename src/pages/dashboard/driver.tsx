@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Car,
   Package,
@@ -10,6 +10,7 @@ import {
   Calendar,
   ArrowRight,
   History,
+  Layers,
 } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import {
@@ -63,6 +64,33 @@ interface DeliveryRequest extends PurchaseRequest {
   receivedAt?: string;
 }
 
+// Batch grouping for requests created together
+interface RequestBatch {
+  batchId: string | null;
+  requests: DeliveryRequest[];
+  prorabName: string;
+  totalQty: number;
+}
+
+function groupRequestsByBatch(requests: DeliveryRequest[]): RequestBatch[] {
+  const batchMap = new Map<string, RequestBatch>();
+  for (const req of requests) {
+    const key = req.batchId || `single_${req.id}`;
+    if (!batchMap.has(key)) {
+      batchMap.set(key, {
+        batchId: req.batchId || null,
+        requests: [],
+        prorabName: req.requestedBy?.name || "Noma'lum",
+        totalQty: 0,
+      });
+    }
+    const group = batchMap.get(key)!;
+    group.requests.push(req);
+    group.totalQty += req.requestedQty;
+  }
+  return Array.from(batchMap.values());
+}
+
 export default function DriverPage() {
   const [activeTab, setActiveTab] = useState("assigned");
   const [collectDialog, setCollectDialog] = useState<DeliveryRequest | null>(null);
@@ -109,6 +137,10 @@ export default function DriverPage() {
   const assignedRequests = (assignedResponse?.data || []) as DeliveryRequest[];
   const inTransitRequests = (inTransitResponse?.data || []) as DeliveryRequest[];
   const completedRequests = (completedResponse?.data || []) as DeliveryRequest[];
+
+  // Group requests by batchId
+  const assignedBatches = useMemo(() => groupRequestsByBatch(assignedRequests), [assignedRequests]);
+  const inTransitBatches = useMemo(() => groupRequestsByBatch(inTransitRequests), [inTransitRequests]);
 
   const handleCollect = async () => {
     if (!collectDialog || !collectedQty) return;
@@ -237,7 +269,7 @@ export default function DriverPage() {
                     <div key={i} className="h-24 bg-muted/50 rounded-lg animate-pulse" />
                   ))}
                 </div>
-              ) : assignedRequests.length === 0 ? (
+              ) : assignedBatches.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Car className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Tayinlangan so'rovlar yo'q</p>
@@ -245,48 +277,81 @@ export default function DriverPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {assignedRequests.map((request) => (
-                    <div
-                      key={request.id}
-                      className="p-4 rounded-lg border bg-card space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
-                            {request.smetaItem?.name || "Material"}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                            <User className="h-3 w-3" />
-                            <span>{request.requestedBy?.name || "Noma'lum"}</span>
+                  {assignedBatches.map((batch) => {
+                    const isBatch = batch.requests.length > 1;
+                    const firstRequest = batch.requests[0];
+                    return (
+                      <div
+                        key={batch.batchId || firstRequest.id}
+                        className="p-4 rounded-lg border bg-card space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            {isBatch ? (
+                              <>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="gap-1">
+                                    <Layers className="h-3 w-3" />
+                                    {batch.requests.length} ta material
+                                  </Badge>
+                                </div>
+                                <p className="font-medium text-sm text-muted-foreground">
+                                  {batch.requests.map((r) => r.smetaItem?.name || "Material").join(", ")}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="font-medium truncate">
+                                {firstRequest.smetaItem?.name || "Material"}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                              <User className="h-3 w-3" />
+                              <span>{batch.prorabName}</span>
+                            </div>
                           </div>
+                          {!isBatch && (
+                            <Badge variant="outline" className="shrink-0">
+                              {formatNumber(firstRequest.requestedQty)} {firstRequest.smetaItem?.unit || "ta"}
+                            </Badge>
+                          )}
                         </div>
-                        <Badge variant="outline" className="shrink-0">
-                          {formatNumber(request.requestedQty)} {request.smetaItem?.unit || "ta"}
-                        </Badge>
+                        {isBatch && (
+                          <div className="space-y-2 border-t pt-2">
+                            {batch.requests.map((req) => (
+                              <div key={req.id} className="flex items-center justify-between text-sm">
+                                <span>{req.smetaItem?.name || "Material"}</span>
+                                <Badge variant="secondary">
+                                  {formatNumber(req.requestedQty)} {req.smetaItem?.unit || "ta"}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {firstRequest.note && !isBatch && (
+                          <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                            {firstRequest.note}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(firstRequest.createdAt)}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              // For batch, use the first request (in real app would handle batch)
+                              setCollectDialog(firstRequest);
+                              setCollectedQty(String(firstRequest.requestedQty));
+                            }}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            {isBatch ? "Barchasini oldim" : "Olib bo'ldim"}
+                          </Button>
+                        </div>
                       </div>
-                      {request.note && (
-                        <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
-                          {request.note}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(request.createdAt)}
-                        </span>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setCollectDialog(request);
-                            setCollectedQty(String(request.requestedQty));
-                          }}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Olib bo'ldim
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -309,7 +374,7 @@ export default function DriverPage() {
                     <div key={i} className="h-24 bg-muted/50 rounded-lg animate-pulse" />
                   ))}
                 </div>
-              ) : inTransitRequests.length === 0 ? (
+              ) : inTransitBatches.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Truck className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>Yo'ldagi yetkazmalar yo'q</p>
@@ -317,50 +382,82 @@ export default function DriverPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {inTransitRequests.map((request) => (
-                    <div
-                      key={request.id}
-                      className="p-4 rounded-lg border bg-primary/5 border-primary/20 space-y-3"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
-                            {request.smetaItem?.name || "Material"}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                            <MapPin className="h-3 w-3" />
-                            <span>Yetkazish manzili</span>
+                  {inTransitBatches.map((batch) => {
+                    const isBatch = batch.requests.length > 1;
+                    const firstRequest = batch.requests[0];
+                    return (
+                      <div
+                        key={batch.batchId || firstRequest.id}
+                        className="p-4 rounded-lg border bg-primary/5 border-primary/20 space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            {isBatch ? (
+                              <>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="gap-1">
+                                    <Layers className="h-3 w-3" />
+                                    {batch.requests.length} ta material
+                                  </Badge>
+                                </div>
+                                <p className="font-medium text-sm text-muted-foreground">
+                                  {batch.requests.map((r) => r.smetaItem?.name || "Material").join(", ")}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="font-medium truncate">
+                                {firstRequest.smetaItem?.name || "Material"}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                              <MapPin className="h-3 w-3" />
+                              <span>Yetkazish manzili</span>
+                            </div>
                           </div>
+                          <Badge className="shrink-0 bg-primary/10 text-primary">
+                            <Truck className="h-3 w-3 mr-1" />
+                            Yo'lda
+                          </Badge>
                         </div>
-                        <Badge className="shrink-0 bg-primary/10 text-primary">
-                          <Truck className="h-3 w-3 mr-1" />
-                          Yo'lda
-                        </Badge>
+                        {isBatch && (
+                          <div className="space-y-2 border-t pt-2">
+                            {batch.requests.map((req) => (
+                              <div key={req.id} className="flex items-center justify-between text-sm">
+                                <span>{req.smetaItem?.name || "Material"}</span>
+                                <Badge variant="secondary">
+                                  {formatNumber(req.collectedQty || req.requestedQty)} {req.smetaItem?.unit || "ta"}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {!isBatch && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground">Olingan:</span>
+                            <span className="font-medium">
+                              {formatNumber(firstRequest.collectedQty || firstRequest.requestedQty)} {firstRequest.smetaItem?.unit || "ta"}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Olingan: {firstRequest.collectedAt ? formatDate(firstRequest.collectedAt) : formatDate(firstRequest.createdAt)}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setDeliverDialog(firstRequest);
+                              setDeliveredQty(String(firstRequest.collectedQty || firstRequest.requestedQty));
+                            }}
+                          >
+                            <ArrowRight className="h-4 w-4 mr-1" />
+                            {isBatch ? "Barchasini yetkazdim" : "Yetkazib berdim"}
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Olingan:</span>
-                        <span className="font-medium">
-                          {formatNumber(request.collectedQty || request.requestedQty)} {request.smetaItem?.unit || "ta"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Olingan: {request.collectedAt ? formatDate(request.collectedAt) : formatDate(request.createdAt)}
-                        </span>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setDeliverDialog(request);
-                            setDeliveredQty(String(request.collectedQty || request.requestedQty));
-                          }}
-                        >
-                          <ArrowRight className="h-4 w-4 mr-1" />
-                          Yetkazib berdim
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
