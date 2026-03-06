@@ -1,14 +1,10 @@
-FROM node:20-alpine AS base
-
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-FROM base AS deps
+FROM node:20-alpine AS deps
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json package-lock.json* ./
+RUN npm install
 
-FROM base AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -17,7 +13,7 @@ COPY . .
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
-RUN pnpm build
+RUN npx vite build
 
 FROM nginx:alpine AS runner
 
